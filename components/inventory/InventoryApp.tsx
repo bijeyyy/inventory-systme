@@ -497,7 +497,6 @@ function AuthView({ authTab, setAuthTab, onLogin }: AuthViewProps) {
         <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/70 to-zinc-950 opacity-90" />
         <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-primary/30 blur-3xl" />
         <div className="relative text-primary-foreground max-w-md">
-          <p className="text-primary-foreground/70 text-sm font-medium mb-3">Trusted by 900+ independent coffee shops</p>
           <h2 className="font-heading text-3xl font-bold tracking-tight leading-tight mb-4">Know exactly what&apos;s in your stockroom, down to the last bean.</h2>
           <p className="text-primary-foreground/80 text-sm leading-relaxed">Real-time stock counts, low-stock alerts, and reports that make sense — built for the way small cafés actually run.</p>
           <div className="mt-10 flex items-center gap-4 bg-primary-foreground/10 backdrop-blur rounded-xl p-4 border border-primary-foreground/10">

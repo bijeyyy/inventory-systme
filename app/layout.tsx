@@ -16,7 +16,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Stockroom",
+  title: "BrewStock",
   description: "Inventory management for small businesses",
 };
 
