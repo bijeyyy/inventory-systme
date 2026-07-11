@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stockroom — Inventory Management</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
+        colors: {
+          brand: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' }
+        },
+        boxShadow: { soft: '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06)' }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  * { font-family: 'Inter', ui-sans-serif, system-ui; }
+  html { scroll-behavior: smooth; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(120,120,130,.35); border-radius: 8px; }
+  .dark ::-webkit-scrollbar-thumb { background: rgba(180,180,200,.25); }
+  .view { display: none; }
+  .view.active { display: block; animation: fadein .25s ease; }
+  @keyframes fadein { from { opacity:0; transform: translateY(4px);} to {opacity:1; transform:none;} }
+  .skeleton { background: linear-gradient(90deg, rgba(120,120,130,.12) 25%, rgba(120,120,130,.22) 37%, rgba(120,120,130,.12) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+  @keyframes shimmer { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+  .drawer { transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1); }
+  .drawer.open { transform: translateX(0); }
+  .modal-panel { transition: transform .18s ease, opacity .18s ease; }
+  .row-flash { animation: flash 1.2s ease; }
+  @keyframes flash { 0%{ background-color: rgba(79,70,229,.14);} 100%{ background-color: transparent; } }
+  .toast-enter { animation: toastin .25s cubic-bezier(.4,0,.2,1); }
+  @keyframes toastin { from { opacity:0; transform: translateX(16px);} to { opacity:1; transform:none; } }
+  [data-nav].active { background: rgb(79 70 229 / 0.1); color: rgb(79 70 229); }
+  .dark [data-nav].active { background: rgb(99 102 241 / 0.15); color: rgb(165 180 252); }
+</style>
+</head>
+<body class="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 antialiased">
+
+<!-- ============ SKELETON LOADER (initial) ============ -->
+<div id="boot-skeleton" class="fixed inset-0 z-[100] bg-zinc-50 dark:bg-zinc-950 flex">
+  <div class="w-60 border-r border-zinc-200 dark:border-zinc-800 p-4 space-y-3 hidden md:block">
+    <div class="h-8 w-28 skeleton rounded-lg"></div>
+    <div class="pt-6 space-y-2">
+      <div class="h-9 w-full skeleton rounded-lg"></div>
+      <div class="h-9 w-full skeleton rounded-lg"></div>
+      <div class="h-9 w-full skeleton rounded-lg"></div>
+      <div class="h-9 w-full skeleton rounded-lg"></div>
+    </div>
+  </div>
+  <div class="flex-1 p-8 space-y-6">
+    <div class="h-7 w-56 skeleton rounded-lg"></div>
+    <div class="grid grid-cols-4 gap-4">
+      <div class="h-24 skeleton rounded-xl"></div><div class="h-24 skeleton rounded-xl"></div>
+      <div class="h-24 skeleton rounded-xl"></div><div class="h-24 skeleton rounded-xl"></div>
+    </div>
+    <div class="h-72 skeleton rounded-xl"></div>
+  </div>
+</div>
+
+<!-- ============ AUTH VIEW ============ -->
+<div id="view-auth" class="view min-h-screen w-full grid md:grid-cols-2">
+  <div class="flex flex-col justify-center px-8 sm:px-16 py-12">
+    <div class="max-w-sm w-full mx-auto">
+      <div class="flex items-center gap-2 mb-10">
+        <div class="h-8 w-8 rounded-lg bg-brand-600 flex items-center justify-center"><i data-lucide="boxes" class="h-4 w-4 text-white"></i></div>
+        <span class="font-bold text-lg tracking-tight">Stockroom</span>
+      </div>
+      <div class="flex gap-1 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-lg mb-8 w-fit">
+        <button onclick="setAuthTab('login')" id="tab-login" class="px-4 py-1.5 text-sm font-medium rounded-md bg-white dark:bg-zinc-800 shadow-soft">Log in</button>
+        <button onclick="setAuthTab('register')" id="tab-register" class="px-4 py-1.5 text-sm font-medium rounded-md text-zinc-500">Create account</button>
+      </div>
+      <h1 class="text-2xl font-bold tracking-tight mb-1" id="auth-title">Welcome back</h1>
+      <p class="text-sm text-zinc-500 mb-8" id="auth-sub">Log in to your workspace to keep selling.</p>
+      <div class="space-y-4">
+        <div id="reg-field" class="hidden">
+          <label class="text-sm font-medium mb-1.5 block">Business name</label>
+          <input type="text" placeholder="e.g. Dela Cruz Hardware" class="w-full px-3 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-sm font-medium mb-1.5 block">Email</label>
+          <input type="email" value="owner@delacruzhardware.ph" class="w-full px-3 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1.5"><label class="text-sm font-medium">Password</label><a href="#" class="text-xs text-brand-600 dark:text-brand-400 font-medium hover:underline">Forgot password?</a></div>
+          <input type="password" value="••••••••" class="w-full px-3 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <button onclick="login()" class="w-full bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold py-2.5 rounded-lg transition shadow-soft">Continue</button>
+      </div>
+      <p class="text-xs text-zinc-400 mt-8 text-center">This is a UI prototype — click Continue to explore the dashboard.</p>
+    </div>
+  </div>
+  <div class="hidden md:flex relative bg-zinc-950 overflow-hidden items-center justify-center p-16">
+    <div class="absolute inset-0 bg-gradient-to-br from-brand-600 via-brand-800 to-zinc-950 opacity-90"></div>
+    <div class="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-brand-500/30 blur-3xl"></div>
+    <div class="relative text-white max-w-md">
+      <p class="text-brand-200 text-sm font-medium mb-3">Trusted by 2,400+ Filipino retailers</p>
+      <h2 class="text-3xl font-bold tracking-tight leading-tight mb-4">Know exactly what's on your shelves, every minute of the day.</h2>
+      <p class="text-brand-100/80 text-sm leading-relaxed">Real-time stock counts, low-stock alerts, and reports that make sense — built for the way small businesses actually run.</p>
+      <div class="mt-10 flex items-center gap-4 bg-white/10 backdrop-blur rounded-xl p-4 border border-white/10">
+        <div class="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center font-bold">MC</div>
+        <div>
+          <p class="text-sm font-medium">"Nakita ko agad kung ano ang paubos. Wala nang guessing game."</p>
+          <p class="text-xs text-brand-200 mt-1">Marites C. — Sari-Sari Plus, Cavite</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app-shell" class="hidden min-h-screen">
+  <div class="flex">
+    <!-- Sidebar -->
+    <aside class="hidden md:flex flex-col w-60 shrink-0 h-screen sticky top-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+      <div class="h-16 flex items-center gap-2 px-5 border-b border-zinc-200 dark:border-zinc-800">
+        <div class="h-7 w-7 rounded-lg bg-brand-600 flex items-center justify-center"><i data-lucide="boxes" class="h-4 w-4 text-white"></i></div>
+        <span class="font-bold tracking-tight">Stockroom</span>
+      </div>
+      <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        <p class="px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Overview</p>
+        <a href="#" data-nav="dashboard" onclick="navigate('dashboard')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="layout-dashboard" class="h-4 w-4"></i>Dashboard</a>
+        <p class="px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1 mt-4">Inventory</p>
+        <a href="#" data-nav="products" onclick="navigate('products')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="package" class="h-4 w-4"></i>Products</a>
+        <a href="#" data-nav="transactions" onclick="navigate('transactions')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="arrow-left-right" class="h-4 w-4"></i>Stock In / Out</a>
+        <a href="#" data-nav="categories" onclick="navigate('categories')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="tags" class="h-4 w-4"></i>Categories &amp; Suppliers</a>
+        <p class="px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1 mt-4">Insights</p>
+        <a href="#" data-nav="reports" onclick="navigate('reports')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="bar-chart-3" class="h-4 w-4"></i>Reports</a>
+        <p class="px-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1 mt-4">Workspace</p>
+        <a href="#" data-nav="team" onclick="navigate('team')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="users" class="h-4 w-4"></i>Team</a>
+        <a href="#" data-nav="settings" onclick="navigate('settings')" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="settings" class="h-4 w-4"></i>Settings</a>
+      </nav>
+      <div class="p-3 border-t border-zinc-200 dark:border-zinc-800">
+        <div class="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer" onclick="navigate('settings')">
+          <div class="h-8 w-8 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300 flex items-center justify-center text-xs font-bold">DH</div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium truncate">Dela Cruz Hardware</p>
+            <p class="text-xs text-zinc-400 truncate">Owner plan</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="flex-1 min-w-0">
+      <!-- Topbar -->
+      <header class="h-16 sticky top-0 z-30 flex items-center justify-between gap-4 px-4 md:px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur">
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="md:hidden"><i data-lucide="menu" class="h-5 w-5"></i></button>
+          <h1 id="page-title" class="font-semibold text-lg tracking-tight truncate">Dashboard</h1>
+        </div>
+        <div class="flex items-center gap-2 md:gap-3">
+          <div class="relative hidden sm:block">
+            <i data-lucide="search" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"></i>
+            <input placeholder="Search products, SKUs…" class="pl-9 pr-3 py-2 w-56 lg:w-72 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white dark:focus:bg-zinc-950 transition">
+          </div>
+          <button onclick="toggleTheme()" class="h-9 w-9 rounded-lg border border-zinc-200 dark:border-zinc-800 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-900 transition">
+            <i data-lucide="sun" id="icon-sun" class="h-4 w-4"></i>
+            <i data-lucide="moon" id="icon-moon" class="h-4 w-4 hidden"></i>
+          </button>
+          <button class="relative h-9 w-9 rounded-lg border border-zinc-200 dark:border-zinc-800 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-900 transition">
+            <i data-lucide="bell" class="h-4 w-4"></i>
+            <span class="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+          </button>
+          <button onclick="navigate('auth')" class="h-8 w-8 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center">DH</button>
+        </div>
+      </header>
+
+      <main class="p-4 md:p-6 max-w-[1400px] mx-auto">
+
+        <!-- ================= DASHBOARD ================= -->
+        <section id="view-dashboard" class="view active space-y-6">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 class="text-xl font-bold tracking-tight">Good morning, Marites 👋</h2>
+              <p class="text-sm text-zinc-500 mt-0.5">Here's what's happening in your store today, Jul 10.</p>
+            </div>
+            <button onclick="openDrawer()" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition shadow-soft"><i data-lucide="plus" class="h-4 w-4"></i>Add Product</button>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:shadow-soft transition">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-zinc-500">Total Products</span><i data-lucide="package" class="h-4 w-4 text-brand-500"></i></div>
+              <p class="text-2xl font-bold tracking-tight">248</p>
+              <p class="text-xs text-emerald-600 mt-1 flex items-center gap-1"><i data-lucide="trending-up" class="h-3 w-3"></i>+12 this month</p>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:shadow-soft transition">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-zinc-500">Low Stock Items</span><i data-lucide="triangle-alert" class="h-4 w-4 text-amber-500"></i></div>
+              <p class="text-2xl font-bold tracking-tight">9</p>
+              <p class="text-xs text-amber-600 mt-1">Needs reordering soon</p>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:shadow-soft transition">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-zinc-500">Inventory Value</span><i data-lucide="wallet" class="h-4 w-4 text-brand-500"></i></div>
+              <p class="text-2xl font-bold tracking-tight">₱486,200</p>
+              <p class="text-xs text-zinc-400 mt-1">Across all categories</p>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 hover:shadow-soft transition">
+              <div class="flex items-center justify-between mb-3"><span class="text-xs font-medium text-zinc-500">Sales Today</span><i data-lucide="receipt" class="h-4 w-4 text-emerald-500"></i></div>
+              <p class="text-2xl font-bold tracking-tight">₱18,940</p>
+              <p class="text-xs text-emerald-600 mt-1 flex items-center gap-1"><i data-lucide="trending-up" class="h-3 w-3"></i>+8.4% vs yesterday</p>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-3 gap-5">
+            <div class="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-semibold text-sm">Stock Movement Trend</h3>
+                  <p class="text-xs text-zinc-400">Units moved in vs out</p>
+                </div>
+                <div class="flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg text-xs">
+                  <button id="range-7" onclick="setRange(7)" class="px-2.5 py-1 rounded-md bg-white dark:bg-zinc-700 shadow-soft font-medium">7D</button>
+                  <button id="range-30" onclick="setRange(30)" class="px-2.5 py-1 rounded-md text-zinc-500 font-medium">30D</button>
+                </div>
+              </div>
+              <canvas id="chart-trend" height="90"></canvas>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-sm">Low Stock Alerts</h3>
+                <span class="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full font-medium">5 items</span>
+              </div>
+              <div id="low-stock-widget" class="space-y-1"></div>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-5 pb-3 flex items-center justify-between">
+              <h3 class="font-semibold text-sm">Recent Transactions</h3>
+              <a href="#" onclick="navigate('transactions')" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">View all</a>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-zinc-400 border-y border-zinc-200 dark:border-zinc-800">
+                  <th class="font-medium px-5 py-2.5">Product</th><th class="font-medium px-5 py-2.5">Type</th><th class="font-medium px-5 py-2.5">Qty</th><th class="font-medium px-5 py-2.5">Note</th><th class="font-medium px-5 py-2.5">By</th><th class="font-medium px-5 py-2.5">Time</th>
+                </tr></thead>
+                <tbody id="recent-tx-body" class="divide-y divide-zinc-100 dark:divide-zinc-800"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= PRODUCTS ================= -->
+        <section id="view-products" class="view space-y-4">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div><h2 class="text-xl font-bold tracking-tight">Products</h2><p class="text-sm text-zinc-500 mt-0.5">Manage your catalog and stock levels.</p></div>
+            <div class="flex items-center gap-2">
+              <button onclick="toast('CSV exported','Your product list was downloaded.')" class="flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-800 text-sm font-medium px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"><i data-lucide="download" class="h-4 w-4"></i>Export</button>
+              <button onclick="openDrawer()" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition shadow-soft"><i data-lucide="plus" class="h-4 w-4"></i>Add Product</button>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-4 flex flex-wrap items-center gap-2 border-b border-zinc-200 dark:border-zinc-800">
+              <div class="relative flex-1 min-w-[200px]">
+                <i data-lucide="search" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"></i>
+                <input id="p-search" oninput="renderProducts()" placeholder="Search by name or SKU…" class="pl-9 pr-3 py-2 w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+              </div>
+              <select id="p-category" onchange="renderProducts()" class="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm">
+                <option value="">All categories</option>
+                <option>Hardware</option><option>Electrical</option><option>Plumbing</option><option>Paint</option><option>Tools</option>
+              </select>
+              <select id="p-status" onchange="renderProducts()" class="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm">
+                <option value="">All status</option><option>In Stock</option><option>Low Stock</option><option>Out of Stock</option>
+              </select>
+            </div>
+            <div id="bulk-bar" class="hidden px-4 py-2 bg-brand-50 dark:bg-brand-950/40 border-b border-brand-100 dark:border-brand-900 flex items-center justify-between text-sm">
+              <span><span id="bulk-count">0</span> selected</span>
+              <div class="flex gap-2">
+                <button onclick="toast('Exported selected','CSV downloaded for selected rows.')" class="px-2.5 py-1 rounded-md hover:bg-white dark:hover:bg-zinc-800 font-medium">Export</button>
+                <button onclick="bulkDelete()" class="px-2.5 py-1 rounded-md text-rose-600 hover:bg-white dark:hover:bg-zinc-800 font-medium">Delete</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
+                  <th class="px-4 py-2.5 w-8"><input type="checkbox" onclick="toggleAll(this)"></th>
+                  <th class="font-medium px-2 py-2.5">Product</th><th class="font-medium px-2 py-2.5">SKU</th><th class="font-medium px-2 py-2.5">Category</th><th class="font-medium px-2 py-2.5">Stock</th><th class="font-medium px-2 py-2.5">Unit Price</th><th class="font-medium px-2 py-2.5">Status</th><th class="font-medium px-4 py-2.5 text-right">Actions</th>
+                </tr></thead>
+                <tbody id="products-body" class="divide-y divide-zinc-100 dark:divide-zinc-800"></tbody>
+              </table>
+              <div id="products-empty" class="hidden flex-col items-center justify-center py-16 text-center">
+                <div class="h-12 w-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-3"><i data-lucide="package-search" class="h-5 w-5 text-zinc-400"></i></div>
+                <p class="font-medium text-sm">No products match your filters</p>
+                <p class="text-xs text-zinc-400 mt-1 mb-4">Try adjusting your search or filters.</p>
+                <button onclick="clearProductFilters()" class="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline">Clear filters</button>
+              </div>
+            </div>
+            <div class="px-4 py-3 flex items-center justify-between text-xs text-zinc-400 border-t border-zinc-200 dark:border-zinc-800">
+              <span id="p-count-label">Showing 0 of 0 products</span>
+              <div class="flex gap-1">
+                <button class="h-7 w-7 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center justify-center">‹</button>
+                <button class="h-7 w-7 rounded-md bg-brand-600 text-white flex items-center justify-center">1</button>
+                <button class="h-7 w-7 rounded-md border border-zinc-200 dark:border-zinc-800 flex items-center justify-center">›</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TRANSACTIONS ================= -->
+        <section id="view-transactions" class="view space-y-5">
+          <div><h2 class="text-xl font-bold tracking-tight">Stock In / Out</h2><p class="text-sm text-zinc-500 mt-0.5">Log incoming and outgoing stock. Updates reflect instantly.</p></div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+              <div class="flex items-center gap-2 mb-4"><div class="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center"><i data-lucide="arrow-down-to-line" class="h-4 w-4 text-emerald-600"></i></div><h3 class="font-semibold text-sm">Stock In</h3></div>
+              <div class="space-y-3">
+                <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Product</label><select id="in-product" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></select></div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Quantity</label><input id="in-qty" type="number" value="20" min="1" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></div>
+                  <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Supplier</label><select id="in-supplier" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"><option>ACE Hardware Supply Co.</option><option>Metro Builders Trading</option><option>Sunrise Electrical Distributors</option></select></div>
+                </div>
+                <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Note (optional)</label><input id="in-note" placeholder="e.g. Weekly restock delivery" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></div>
+                <button onclick="logTransaction('IN')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">Log Stock In</button>
+              </div>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+              <div class="flex items-center gap-2 mb-4"><div class="h-8 w-8 rounded-lg bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center"><i data-lucide="arrow-up-from-line" class="h-4 w-4 text-rose-600"></i></div><h3 class="font-semibold text-sm">Stock Out</h3></div>
+              <div class="space-y-3">
+                <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Product</label><select id="out-product" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></select></div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Quantity</label><input id="out-qty" type="number" value="5" min="1" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></div>
+                  <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Reason</label><select id="out-reason" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"><option>Sale</option><option>Damaged</option><option>Return to supplier</option><option>Internal use</option></select></div>
+                </div>
+                <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Note (optional)</label><input id="out-note" placeholder="e.g. Walk-in customer sale" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></div>
+                <button onclick="logTransaction('OUT')" class="w-full bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">Log Stock Out</button>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-5 pb-3 flex items-center justify-between"><h3 class="font-semibold text-sm">Transaction Log</h3><span class="text-xs text-zinc-400 flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Live</span></div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-xs text-zinc-400 border-y border-zinc-200 dark:border-zinc-800">
+                  <th class="font-medium px-5 py-2.5">Product</th><th class="font-medium px-5 py-2.5">Type</th><th class="font-medium px-5 py-2.5">Qty</th><th class="font-medium px-5 py-2.5">Note</th><th class="font-medium px-5 py-2.5">By</th><th class="font-medium px-5 py-2.5">Time</th>
+                </tr></thead>
+                <tbody id="tx-body" class="divide-y divide-zinc-100 dark:divide-zinc-800"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= CATEGORIES & SUPPLIERS ================= -->
+        <section id="view-categories" class="view space-y-4">
+          <div><h2 class="text-xl font-bold tracking-tight">Categories &amp; Suppliers</h2><p class="text-sm text-zinc-500 mt-0.5">Organize your catalog and manage vendor contacts.</p></div>
+          <div class="flex gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg w-fit">
+            <button id="cs-tab-cat" onclick="setCSTab('cat')" class="px-4 py-1.5 text-sm font-medium rounded-md bg-white dark:bg-zinc-800 shadow-soft">Categories</button>
+            <button id="cs-tab-sup" onclick="setCSTab('sup')" class="px-4 py-1.5 text-sm font-medium rounded-md text-zinc-500">Suppliers</button>
+          </div>
+          <div id="cat-panel" class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800"><span class="text-sm text-zinc-500">5 categories</span><button onclick="openModal('cat')" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="h-4 w-4"></i>Add Category</button></div>
+            <table class="w-full text-sm"><thead><tr class="text-left text-xs text-zinc-400 border-b border-zinc-200 dark:border-zinc-800"><th class="font-medium px-5 py-2.5">Name</th><th class="font-medium px-5 py-2.5">Products</th><th class="font-medium px-5 py-2.5">Description</th><th class="px-5 py-2.5"></th></tr></thead>
+            <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+              <tr><td class="px-5 py-3 font-medium">Hardware</td><td class="px-5 py-3 text-zinc-500">86</td><td class="px-5 py-3 text-zinc-500">Nails, bolts, fasteners</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+              <tr><td class="px-5 py-3 font-medium">Electrical</td><td class="px-5 py-3 text-zinc-500">54</td><td class="px-5 py-3 text-zinc-500">Wiring, switches, breakers</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+              <tr><td class="px-5 py-3 font-medium">Plumbing</td><td class="px-5 py-3 text-zinc-500">41</td><td class="px-5 py-3 text-zinc-500">Pipes, fittings, valves</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+              <tr><td class="px-5 py-3 font-medium">Paint</td><td class="px-5 py-3 text-zinc-500">37</td><td class="px-5 py-3 text-zinc-500">Paints, brushes, thinners</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+              <tr><td class="px-5 py-3 font-medium">Tools</td><td class="px-5 py-3 text-zinc-500">30</td><td class="px-5 py-3 text-zinc-500">Hand and power tools</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+            </tbody></table>
+          </div>
+          <div id="sup-panel" class="hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800"><span class="text-sm text-zinc-500">3 suppliers</span><button onclick="openModal('sup')" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="h-4 w-4"></i>Add Supplier</button></div>
+            <table class="w-full text-sm"><thead><tr class="text-left text-xs text-zinc-400 border-b border-zinc-200 dark:border-zinc-800"><th class="font-medium px-5 py-2.5">Company</th><th class="font-medium px-5 py-2.5">Contact</th><th class="font-medium px-5 py-2.5">Phone</th><th class="font-medium px-5 py-2.5">Email</th><th class="px-5 py-2.5"></th></tr></thead>
+            <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+              <tr><td class="px-5 py-3 font-medium">ACE Hardware Supply Co.</td><td class="px-5 py-3 text-zinc-500">Jun Santos</td><td class="px-5 py-3 text-zinc-500">0917 234 5678</td><td class="px-5 py-3 text-zinc-500">jun@acesupply.ph</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+              <tr><td class="px-5 py-3 font-medium">Metro Builders Trading</td><td class="px-5 py-3 text-zinc-500">Liza Reyes</td><td class="px-5 py-3 text-zinc-500">0918 555 2211</td><td class="px-5 py-3 text-zinc-500">liza@metrobuilders.ph</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+              <tr><td class="px-5 py-3 font-medium">Sunrise Electrical Distributors</td><td class="px-5 py-3 text-zinc-500">Paolo Ramos</td><td class="px-5 py-3 text-zinc-500">0920 887 4433</td><td class="px-5 py-3 text-zinc-500">paolo@sunriseelec.ph</td><td class="px-5 py-3 text-right"><i data-lucide="pencil" class="h-3.5 w-3.5 inline text-zinc-400 cursor-pointer"></i></td></tr>
+            </tbody></table>
+          </div>
+        </section>
+
+        <!-- ================= REPORTS ================= -->
+        <section id="view-reports" class="view space-y-5">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div><h2 class="text-xl font-bold tracking-tight">Reports &amp; Analytics</h2><p class="text-sm text-zinc-500 mt-0.5">Understand trends and make better restocking decisions.</p></div>
+            <div class="flex items-center gap-2">
+              <div class="flex gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg text-xs">
+                <button class="px-2.5 py-1.5 rounded-md bg-white dark:bg-zinc-800 shadow-soft font-medium">7D</button>
+                <button class="px-2.5 py-1.5 rounded-md text-zinc-500 font-medium">30D</button>
+                <button class="px-2.5 py-1.5 rounded-md text-zinc-500 font-medium">90D</button>
+              </div>
+              <button onclick="toast('Report exported','CSV file downloaded.')" class="flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-800 text-sm font-medium px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"><i data-lucide="file-down" class="h-4 w-4"></i>CSV</button>
+              <button onclick="toast('Report exported','PDF file downloaded.')" class="flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-800 text-sm font-medium px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"><i data-lucide="file-down" class="h-4 w-4"></i>PDF</button>
+            </div>
+          </div>
+          <div class="grid lg:grid-cols-2 gap-5">
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+              <h3 class="font-semibold text-sm mb-4">Best-Selling Products</h3>
+              <canvas id="chart-bestsellers" height="200"></canvas>
+            </div>
+            <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+              <h3 class="font-semibold text-sm mb-4">Category Breakdown</h3>
+              <canvas id="chart-category" height="200"></canvas>
+            </div>
+          </div>
+          <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+            <h3 class="font-semibold text-sm mb-4">Stock Value Over Time</h3>
+            <canvas id="chart-stockvalue" height="80"></canvas>
+          </div>
+        </section>
+
+        <!-- ================= TEAM ================= -->
+        <section id="view-team" class="view space-y-4">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div><h2 class="text-xl font-bold tracking-tight">Team</h2><p class="text-sm text-zinc-500 mt-0.5">Manage who has access to this workspace.</p></div>
+            <button onclick="openModal('invite')" class="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-soft"><i data-lucide="user-plus" class="h-4 w-4"></i>Invite Member</button>
+          </div>
+          <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <table class="w-full text-sm"><thead><tr class="text-left text-xs text-zinc-400 border-b border-zinc-200 dark:border-zinc-800"><th class="font-medium px-5 py-2.5">Member</th><th class="font-medium px-5 py-2.5">Role</th><th class="font-medium px-5 py-2.5">Status</th><th class="px-5 py-2.5"></th></tr></thead>
+            <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+              <tr><td class="px-5 py-3 flex items-center gap-2.5"><div class="h-8 w-8 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300 flex items-center justify-center text-xs font-bold">MC</div><div><p class="font-medium">Marites Cruz</p><p class="text-xs text-zinc-400">owner@delacruzhardware.ph</p></div></td><td class="px-5 py-3"><span class="text-xs bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 px-2 py-0.5 rounded-full font-medium">Owner</span></td><td class="px-5 py-3"><span class="text-xs text-emerald-600 flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Active</span></td><td></td></tr>
+              <tr><td class="px-5 py-3 flex items-center gap-2.5"><div class="h-8 w-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold">JD</div><div><p class="font-medium">Jomar dela Peña</p><p class="text-xs text-zinc-400">jomar@delacruzhardware.ph</p></div></td><td class="px-5 py-3"><span class="text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-medium">Admin</span></td><td class="px-5 py-3"><span class="text-xs text-emerald-600 flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Active</span></td><td></td></tr>
+              <tr><td class="px-5 py-3 flex items-center gap-2.5"><div class="h-8 w-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold">RS</div><div><p class="font-medium">Rica Salvador</p><p class="text-xs text-zinc-400">rica@delacruzhardware.ph</p></div></td><td class="px-5 py-3"><span class="text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-medium">Staff</span></td><td class="px-5 py-3"><span class="text-xs text-amber-600 flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>Invited</span></td><td></td></tr>
+            </tbody></table>
+          </div>
+        </section>
+
+        <!-- ================= SETTINGS ================= -->
+        <section id="view-settings" class="view space-y-4">
+          <div><h2 class="text-xl font-bold tracking-tight">Settings</h2><p class="text-sm text-zinc-500 mt-0.5">Manage your business profile and preferences.</p></div>
+          <div class="flex gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg w-fit">
+            <button id="set-tab-profile" onclick="setSettingsTab('profile')" class="px-4 py-1.5 text-sm font-medium rounded-md bg-white dark:bg-zinc-800 shadow-soft">Business Profile</button>
+            <button id="set-tab-prefs" onclick="setSettingsTab('prefs')" class="px-4 py-1.5 text-sm font-medium rounded-md text-zinc-500">Preferences</button>
+          </div>
+          <div id="settings-profile" class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 max-w-xl space-y-4">
+            <div><label class="text-sm font-medium mb-1.5 block">Business name</label><input value="Dela Cruz Hardware" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"></div>
+            <div class="grid grid-cols-2 gap-4">
+              <div><label class="text-sm font-medium mb-1.5 block">Currency</label><select class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"><option>PHP (₱)</option><option>USD ($)</option></select></div>
+              <div><label class="text-sm font-medium mb-1.5 block">Timezone</label><select class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"><option>Asia/Manila (GMT+8)</option></select></div>
+            </div>
+            <div><label class="text-sm font-medium mb-1.5 block">Logo</label><div class="border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg p-6 text-center text-xs text-zinc-400 hover:border-brand-400 transition cursor-pointer"><i data-lucide="upload" class="h-5 w-5 mx-auto mb-2"></i>Click or drag to upload</div></div>
+            <button onclick="toast('Settings saved','Your business profile was updated.')" class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Save Changes</button>
+          </div>
+          <div id="settings-prefs" class="hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 max-w-xl space-y-4">
+            <div><label class="text-sm font-medium mb-1.5 block">Low-stock threshold</label><input type="number" value="15" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-sm"><p class="text-xs text-zinc-400 mt-1">Alert when stock falls below this number.</p></div>
+            <div class="flex items-center justify-between py-2"><div><p class="text-sm font-medium">Dark mode</p><p class="text-xs text-zinc-400">Switch the interface theme.</p></div><button onclick="toggleTheme()" class="h-6 w-11 rounded-full bg-brand-600 relative"><span id="theme-dot" class="absolute top-0.5 left-0.5 h-5 w-5 bg-white rounded-full transition-transform"></span></button></div>
+            <div class="flex items-center justify-between py-2"><div><p class="text-sm font-medium">Low-stock email alerts</p><p class="text-xs text-zinc-400">Get notified when items run low.</p></div><input type="checkbox" checked class="h-4 w-4 accent-brand-600"></div>
+            <div class="flex items-center justify-between py-2"><div><p class="text-sm font-medium">Daily sales summary</p><p class="text-xs text-zinc-400">Email digest every evening.</p></div><input type="checkbox" class="h-4 w-4 accent-brand-600"></div>
+            <button onclick="toast('Preferences saved','Your settings were updated.')" class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg">Save Preferences</button>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD PRODUCT DRAWER ============ -->
+<div id="drawer-backdrop" class="hidden fixed inset-0 bg-black/30 z-40" onclick="closeDrawer()"></div>
+<div id="drawer" class="drawer fixed top-0 right-0 h-screen w-full max-w-md bg-white dark:bg-zinc-950 z-50 shadow-2xl border-l border-zinc-200 dark:border-zinc-800 flex flex-col">
+  <div class="h-16 flex items-center justify-between px-5 border-b border-zinc-200 dark:border-zinc-800">
+    <h3 class="font-semibold">Add Product</h3>
+    <button onclick="closeDrawer()"><i data-lucide="x" class="h-5 w-5 text-zinc-400"></i></button>
+  </div>
+  <div class="flex-1 overflow-y-auto p-5 space-y-4">
+    <div><label class="text-sm font-medium mb-1.5 block">Product image</label><div class="border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg p-6 text-center text-xs text-zinc-400 hover:border-brand-400 transition cursor-pointer"><i data-lucide="image-plus" class="h-5 w-5 mx-auto mb-2"></i>Click or drag an image here</div></div>
+    <div><label class="text-sm font-medium mb-1.5 block">Product name</label><input id="np-name" placeholder="e.g. Claw Hammer 16oz" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+    <div><label class="text-sm font-medium mb-1.5 block">SKU</label><div class="flex gap-2"><input id="np-sku" placeholder="Auto-generated" class="flex-1 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"><button onclick="genSku()" class="px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800">Generate</button></div></div>
+    <div><label class="text-sm font-medium mb-1.5 block">Category</label><select id="np-cat" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"><option>Hardware</option><option>Electrical</option><option>Plumbing</option><option>Paint</option><option>Tools</option></select></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="text-sm font-medium mb-1.5 block">Opening stock</label><input id="np-stock" type="number" value="0" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+      <div><label class="text-sm font-medium mb-1.5 block">Unit price (₱)</label><input id="np-price" type="number" value="0" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+    </div>
+    <div><label class="text-sm font-medium mb-1.5 block">Low-stock threshold</label><input id="np-threshold" type="number" value="15" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+  </div>
+  <div class="p-5 border-t border-zinc-200 dark:border-zinc-800 flex gap-2">
+    <button onclick="closeDrawer()" class="flex-1 border border-zinc-200 dark:border-zinc-800 text-sm font-medium py-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">Cancel</button>
+    <button onclick="saveProduct()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold py-2.5 rounded-lg">Save Product</button>
+  </div>
+</div>
+
+<!-- ============ GENERIC MODAL ============ -->
+<div id="modal-backdrop" class="hidden fixed inset-0 bg-black/30 z-40 flex items-center justify-center p-4" onclick="if(event.target===this)closeModal()">
+  <div id="modal-panel" class="modal-panel bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl w-full max-w-sm p-5 opacity-0 scale-95">
+    <div class="flex items-center justify-between mb-4"><h3 id="modal-title" class="font-semibold">Add Category</h3><button onclick="closeModal()"><i data-lucide="x" class="h-4 w-4 text-zinc-400"></i></button></div>
+    <div id="modal-body" class="space-y-3"></div>
+    <div class="flex gap-2 mt-5">
+      <button onclick="closeModal()" class="flex-1 border border-zinc-200 dark:border-zinc-800 text-sm font-medium py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">Cancel</button>
+      <button onclick="confirmModal()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold py-2 rounded-lg">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TOASTS ============ -->
+<div id="toast-stack" class="fixed bottom-5 right-5 z-[60] space-y-2 w-80"></div>
+
+<script>
+/* ---------------- MOCK DATA ---------------- */
+const CATS = ["Hardware","Electrical","Plumbing","Paint","Tools"];
+const names = {
+  Hardware: ["Claw Hammer 16oz","Steel Nails 1kg","Hex Bolts M8x40","Wood Screws Assorted","Padlock 50mm","Hinges 3in Pair","Cable Ties 200pc","Measuring Tape 5m"],
+  Electrical: ["LED Bulb 9W","Extension Cord 5m","Circuit Breaker 20A","Electrical Tape","Switch Plate White","Wire THHN 2.0mm","Socket Outlet","Voltage Tester"],
+  Plumbing: ["PVC Pipe 1/2in","Elbow Fitting 90°","Faucet Chrome","Teflon Tape","Ball Valve 1in","Drain Trap","Pipe Wrench 10in","Rubber Gasket Set"],
+  Paint: ["Latex Paint White 4L","Enamel Paint Red 1L","Paint Brush Set","Paint Roller 9in","Wood Stain Walnut","Primer Sealer 4L","Paint Thinner 1L","Masking Tape"],
+  Tools: ["Cordless Drill 18V","Screwdriver Set 6pc","Adjustable Wrench","Utility Knife","Safety Goggles","Work Gloves Pair","Spirit Level 60cm","Angle Grinder"]
+};
+let products = [];
+let idc = 1;
+CATS.forEach(cat => names[cat].forEach((n,i) => {
+  const stock = [0,3,8,12,22,45,60,90][Math.floor(Math.random()*8)];
+  products.push({
+    id: idc++, name: n, sku: cat.slice(0,3).toUpperCase()+'-'+String(1000+idc),
+    category: cat, stock, price: Math.floor(Math.random()*900)+40, threshold: 15
+  });
+}));
+function statusOf(p){ return p.stock===0 ? 'Out of Stock' : p.stock<=p.threshold ? 'Low Stock' : 'In Stock'; }
+
+let transactions = [
+  {product:'LED Bulb 9W',type:'IN',qty:100,note:'Weekly restock delivery',by:'Marites C.',time:'9:14 AM'},
+  {product:'Claw Hammer 16oz',type:'OUT',qty:2,note:'Sale',by:'Rica S.',time:'9:02 AM'},
+  {product:'PVC Pipe 1/2in',type:'OUT',qty:8,note:'Sale',by:'Jomar D.',time:'8:47 AM'},
+  {product:'Latex Paint White 4L',type:'IN',qty:24,note:'Supplier delivery',by:'Marites C.',time:'8:30 AM'},
+  {product:'Cordless Drill 18V',type:'OUT',qty:1,note:'Sale',by:'Rica S.',time:'8:12 AM'},
+];
+
+/* ---------------- INIT ---------------- */
+window.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  setTimeout(() => {
+    document.getElementById('boot-skeleton').style.display='none';
+    document.getElementById('view-auth').classList.add('active');
+  }, 700);
+  renderProducts();
+  renderRecentTx();
+  renderTxLog();
+  renderLowStock();
+  fillProductSelects();
+  lucide.createIcons();
+});
+
+function login(){
+  document.getElementById('view-auth').classList.remove('active');
+  document.getElementById('app-shell').classList.remove('hidden');
+  navigate('dashboard');
+  setTimeout(()=>{ initCharts(); }, 50);
+  toast('Welcome back, Marites!','You have 5 low-stock items to review.');
+}
+function setAuthTab(tab){
+  const isLogin = tab==='login';
+  document.getElementById('tab-login').className = 'px-4 py-1.5 text-sm font-medium rounded-md '+(isLogin?'bg-white dark:bg-zinc-800 shadow-soft':'text-zinc-500');
+  document.getElementById('tab-register').className = 'px-4 py-1.5 text-sm font-medium rounded-md '+(!isLogin?'bg-white dark:bg-zinc-800 shadow-soft':'text-zinc-500');
+  document.getElementById('reg-field').classList.toggle('hidden', isLogin);
+  document.getElementById('auth-title').textContent = isLogin ? 'Welcome back' : 'Create your workspace';
+  document.getElementById('auth-sub').textContent = isLogin ? 'Log in to your workspace to keep selling.' : 'Set up your business in under a minute.';
+}
+
+/* ---------------- NAV ---------------- */
+function navigate(view){
+  if(view==='auth'){
+    document.getElementById('app-shell').classList.add('hidden');
+    document.getElementById('view-auth').classList.add('active');
+    return;
+  }
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  document.querySelectorAll('[data-nav]').forEach(a=>a.classList.remove('active'));
+  const navEl = document.querySelector(`[data-nav="${view}"]`);
+  if(navEl) navEl.classList.add('active');
+  const titles = {dashboard:'Dashboard',products:'Products',transactions:'Stock In / Out',categories:'Categories & Suppliers',reports:'Reports',team:'Team',settings:'Settings'};
+  document.getElementById('page-title').textContent = titles[view] || 'Dashboard';
+  if(view==='reports') setTimeout(initReportCharts, 50);
+}
+
+/* ---------------- THEME ---------------- */
+function toggleTheme(){
+  document.documentElement.classList.toggle('dark');
+  const dark = document.documentElement.classList.contains('dark');
+  document.getElementById('icon-sun').classList.toggle('hidden', dark);
+  document.getElementById('icon-moon').classList.toggle('hidden', !dark);
+  document.getElementById('theme-dot').style.transform = dark ? 'translateX(20px)' : 'none';
+}
+
+/* ---------------- TOASTS ---------------- */
+function toast(title, desc){
+  const el = document.createElement('div');
+  el.className = 'toast-enter bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg p-3.5 flex gap-3';
+  el.innerHTML = `<div class="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0"><i data-lucide="check" class="h-4 w-4 text-emerald-600"></i></div>
+  <div class="min-w-0"><p class="text-sm font-semibold">${title}</p><p class="text-xs text-zinc-500 mt-0.5">${desc}</p></div>`;
+  document.getElementById('toast-stack').appendChild(el);
+  lucide.createIcons();
+  setTimeout(()=>{ el.style.transition='opacity .25s'; el.style.opacity='0'; setTimeout(()=>el.remove(),250); }, 3200);
+}
+
+/* ---------------- PRODUCTS TABLE ---------------- */
+function statusBadge(s){
+  const map = {'In Stock':'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400','Low Stock':'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400','Out of Stock':'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400'};
+  return `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${map[s]}">${s}</span>`;
+}
+function renderProducts(){
+  const q = (document.getElementById('p-search')?.value||'').toLowerCase();
+  const cat = document.getElementById('p-category')?.value||'';
+  const stat = document.getElementById('p-status')?.value||'';
+  const filtered = products.filter(p=>{
+    const matchQ = p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
+    const matchC = !cat || p.category===cat;
+    const matchS = !stat || statusOf(p)===stat;
+    return matchQ && matchC && matchS;
+  });
+  const body = document.getElementById('products-body');
+  const empty = document.getElementById('products-empty');
+  document.getElementById('p-count-label').textContent = `Showing ${filtered.length} of ${products.length} products`;
+  if(filtered.length===0){ body.innerHTML=''; empty.classList.remove('hidden'); empty.classList.add('flex'); lucide.createIcons(); return; }
+  empty.classList.add('hidden'); empty.classList.remove('flex');
+  body.innerHTML = filtered.map(p=>`
+    <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition" id="prow-${p.id}">
+      <td class="px-4 py-2.5"><input type="checkbox" class="prow-check" data-id="${p.id}" onclick="updateBulk()"></td>
+      <td class="px-2 py-2.5"><div class="flex items-center gap-2.5"><div class="h-8 w-8 rounded-lg bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-300">${p.name.slice(0,2).toUpperCase()}</div><span class="font-medium">${p.name}</span></div></td>
+      <td class="px-2 py-2.5 text-zinc-500 font-mono text-xs">${p.sku}</td>
+      <td class="px-2 py-2.5 text-zinc-500">${p.category}</td>
+      <td class="px-2 py-2.5">${p.stock} units</td>
+      <td class="px-2 py-2.5">₱${p.price.toLocaleString()}</td>
+      <td class="px-2 py-2.5">${statusBadge(statusOf(p))}</td>
+      <td class="px-4 py-2.5 text-right"><div class="flex justify-end gap-2"><button onclick="viewProduct(${p.id})" title="View"><i data-lucide="eye" class="h-4 w-4 text-zinc-400 hover:text-brand-600"></i></button><button onclick="deleteProduct(${p.id})" title="Delete"><i data-lucide="trash-2" class="h-4 w-4 text-zinc-400 hover:text-rose-600"></i></button></div></td>
+    </tr>`).join('');
+  lucide.createIcons();
+}
+function clearProductFilters(){
+  document.getElementById('p-search').value='';
+  document.getElementById('p-category').value='';
+  document.getElementById('p-status').value='';
+  renderProducts();
+}
+function toggleAll(cb){ document.querySelectorAll('.prow-check').forEach(c=>c.checked=cb.checked); updateBulk(); }
+function updateBulk(){
+  const n = document.querySelectorAll('.prow-check:checked').length;
+  document.getElementById('bulk-bar').classList.toggle('hidden', n===0);
+  document.getElementById('bulk-count').textContent = n;
+}
+function bulkDelete(){
+  const ids = [...document.querySelectorAll('.prow-check:checked')].map(c=>+c.dataset.id);
+  products = products.filter(p=>!ids.includes(p.id));
+  renderProducts(); updateBulk(); fillProductSelects();
+  toast('Products deleted', ids.length+' item(s) removed from your catalog.');
+}
+function deleteProduct(id){
+  products = products.filter(p=>p.id!==id);
+  renderProducts(); fillProductSelects();
+  toast('Product deleted','The item was removed from your catalog.');
+}
+function viewProduct(id){
+  const p = products.find(x=>x.id===id);
+  openModal('view', p);
+}
+
+/* ---------------- DRAWER: ADD PRODUCT ---------------- */
+function openDrawer(){
+  document.getElementById('drawer-backdrop').classList.remove('hidden');
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('np-name').value='';
+  genSku();
+}
+function closeDrawer(){
+  document.getElementById('drawer-backdrop').classList.add('hidden');
+  document.getElementById('drawer').classList.remove('open');
+}
+function genSku(){
+  const cat = document.getElementById('np-cat').value;
+  document.getElementById('np-sku').value = cat.slice(0,3).toUpperCase()+'-'+Math.floor(1000+Math.random()*9000);
+}
+function saveProduct(){
+  const name = document.getElementById('np-name').value.trim();
+  if(!name){ toast('Product name required','Please enter a product name before saving.'); return; }
+  const p = {
+    id: idc++, name, sku: document.getElementById('np-sku').value || 'SKU-'+idc,
+    category: document.getElementById('np-cat').value,
+    stock: +document.getElementById('np-stock').value || 0,
+    price: +document.getElementById('np-price').value || 0,
+    threshold: +document.getElementById('np-threshold').value || 15
+  };
+  products.unshift(p);
+  closeDrawer(); renderProducts(); fillProductSelects();
+  toast('Product added', `${name} was added to your catalog.`);
+}
+
+/* ---------------- TRANSACTIONS ---------------- */
+function fillProductSelects(){
+  const opts = products.map(p=>`<option>${p.name}</option>`).join('');
+  document.getElementById('in-product').innerHTML = opts;
+  document.getElementById('out-product').innerHTML = opts;
+}
+function renderRecentTx(){
+  document.getElementById('recent-tx-body').innerHTML = transactions.slice(0,5).map(txRow).join('');
+  lucide.createIcons();
+}
+function renderTxLog(){
+  document.getElementById('tx-body').innerHTML = transactions.map(txRow).join('');
+  lucide.createIcons();
+}
+function txRow(t){
+  const badge = t.type==='IN' ? '<span class="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 flex items-center gap-1 w-fit"><i data-lucide="arrow-down-to-line" class="h-3 w-3"></i>IN</span>'
+    : '<span class="text-xs px-2 py-0.5 rounded-full font-medium bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 flex items-center gap-1 w-fit"><i data-lucide="arrow-up-from-line" class="h-3 w-3"></i>OUT</span>';
+  return `<tr><td class="px-5 py-2.5 font-medium">${t.product}</td><td class="px-5 py-2.5">${badge}</td><td class="px-5 py-2.5">${t.qty}</td><td class="px-5 py-2.5 text-zinc-500">${t.note}</td><td class="px-5 py-2.5 text-zinc-500">${t.by}</td><td class="px-5 py-2.5 text-zinc-400">${t.time}</td></tr>`;
+}
+function logTransaction(type){
+  const pname = document.getElementById(type==='IN'?'in-product':'out-product').value;
+  const qty = +document.getElementById(type==='IN'?'in-qty':'out-qty').value || 1;
+  const note = type==='IN' ? (document.getElementById('in-note').value||'Restock') : (document.getElementById('out-reason').value);
+  const p = products.find(x=>x.name===pname);
+  if(p){ p.stock = type==='IN' ? p.stock+qty : Math.max(0,p.stock-qty); }
+  const t = {product:pname, type, qty, note, by:'Marites C.', time:'Just now'};
+  transactions.unshift(t);
+  renderTxLog(); renderRecentTx(); renderProducts(); renderLowStock();
+  setTimeout(()=>{ const row = document.getElementById('tx-body').firstElementChild; if(row) row.classList.add('row-flash'); }, 10);
+  toast(type==='IN'?'Stock added':'Stock removed', `${qty} units of ${pname} logged.`);
+}
+
+/* ---------------- LOW STOCK WIDGET ---------------- */
+function renderLowStock(){
+  const low = [...products].filter(p=>p.stock<=p.threshold).sort((a,b)=>a.stock-b.stock).slice(0,5);
+  document.getElementById('low-stock-widget').innerHTML = low.map(p=>`
+    <div onclick="navigate('products')" class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer transition">
+      <div class="flex items-center gap-2.5 min-w-0"><div class="h-7 w-7 rounded-md bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0"><i data-lucide="triangle-alert" class="h-3.5 w-3.5 text-amber-600"></i></div><span class="text-sm truncate">${p.name}</span></div>
+      <span class="text-xs font-medium ${p.stock===0?'text-rose-600':'text-amber-600'}">${p.stock} left</span>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+/* ---------------- CATEGORIES/SUPPLIERS + SETTINGS TABS ---------------- */
+function setCSTab(tab){
+  const isCat = tab==='cat';
+  document.getElementById('cs-tab-cat').className = 'px-4 py-1.5 text-sm font-medium rounded-md '+(isCat?'bg-white dark:bg-zinc-800 shadow-soft':'text-zinc-500');
+  document.getElementById('cs-tab-sup').className = 'px-4 py-1.5 text-sm font-medium rounded-md '+(!isCat?'bg-white dark:bg-zinc-800 shadow-soft':'text-zinc-500');
+  document.getElementById('cat-panel').classList.toggle('hidden', !isCat);
+  document.getElementById('sup-panel').classList.toggle('hidden', isCat);
+}
+function setSettingsTab(tab){
+  const isProfile = tab==='profile';
+  document.getElementById('set-tab-profile').className = 'px-4 py-1.5 text-sm font-medium rounded-md '+(isProfile?'bg-white dark:bg-zinc-800 shadow-soft':'text-zinc-500');
+  document.getElementById('set-tab-prefs').className = 'px-4 py-1.5 text-sm font-medium rounded-md '+(!isProfile?'bg-white dark:bg-zinc-800 shadow-soft':'text-zinc-500');
+  document.getElementById('settings-profile').classList.toggle('hidden', !isProfile);
+  document.getElementById('settings-prefs').classList.toggle('hidden', isProfile);
+}
+
+/* ---------------- MODAL ---------------- */
+let modalType = null;
+function openModal(type, data){
+  modalType = type;
+  const title = {cat:'Add Category', sup:'Add Supplier', invite:'Invite Team Member', view:'Product Details'};
+  document.getElementById('modal-title').textContent = title[type];
+  const body = document.getElementById('modal-body');
+  if(type==='cat'){
+    body.innerHTML = `<div><label class="text-xs font-medium text-zinc-500 mb-1 block">Category name</label><input id="m-cat-name" placeholder="e.g. Fasteners" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+    <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Description</label><input id="m-cat-desc" placeholder="Optional" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>`;
+  } else if(type==='sup'){
+    body.innerHTML = `<div><label class="text-xs font-medium text-zinc-500 mb-1 block">Company name</label><input id="m-sup-name" placeholder="e.g. Golden Trading Co." class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+    <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Contact person</label><input id="m-sup-contact" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+    <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Phone</label><input id="m-sup-phone" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>`;
+  } else if(type==='invite'){
+    body.innerHTML = `<div><label class="text-xs font-medium text-zinc-500 mb-1 block">Email address</label><input id="m-inv-email" placeholder="teammate@business.ph" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"></div>
+    <div><label class="text-xs font-medium text-zinc-500 mb-1 block">Role</label><select id="m-inv-role" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-sm"><option>Admin</option><option>Staff</option></select></div>`;
+  } else if(type==='view'){
+    body.innerHTML = `<div class="flex items-center gap-3 mb-2"><div class="h-12 w-12 rounded-lg bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center font-bold text-brand-700 dark:text-brand-300">${data.name.slice(0,2).toUpperCase()}</div><div><p class="font-semibold">${data.name}</p><p class="text-xs text-zinc-400 font-mono">${data.sku}</p></div></div>
+    <div class="grid grid-cols-2 gap-2 text-sm"><div class="bg-zinc-50 dark:bg-zinc-900 rounded-lg p-2.5"><p class="text-xs text-zinc-400">Stock</p><p class="font-medium">${data.stock} units</p></div><div class="bg-zinc-50 dark:bg-zinc-900 rounded-lg p-2.5"><p class="text-xs text-zinc-400">Unit Price</p><p class="font-medium">₱${data.price.toLocaleString()}</p></div><div class="bg-zinc-50 dark:bg-zinc-900 rounded-lg p-2.5"><p class="text-xs text-zinc-400">Category</p><p class="font-medium">${data.category}</p></div><div class="bg-zinc-50 dark:bg-zinc-900 rounded-lg p-2.5"><p class="text-xs text-zinc-400">Status</p><p class="font-medium">${statusOf(data)}</p></div></div>
+    <p class="text-xs font-medium text-zinc-500 mt-3 mb-1">Recent stock history</p>
+    <div class="text-xs text-zinc-500 space-y-1 max-h-28 overflow-y-auto">${transactions.filter(t=>t.product===data.name).slice(0,4).map(t=>`<div class="flex justify-between border-b border-zinc-100 dark:border-zinc-800 py-1"><span>${t.type==='IN'?'+':'-'}${t.qty} · ${t.note}</span><span>${t.time}</span></div>`).join('') || '<p>No recent history.</p>'}</div>`;
+  }
+  document.getElementById('modal-backdrop').classList.remove('hidden');
+  requestAnimationFrame(()=>{ document.getElementById('modal-panel').classList.remove('opacity-0','scale-95'); });
+  lucide.createIcons();
+}
+function closeModal(){
+  document.getElementById('modal-panel').classList.add('opacity-0','scale-95');
+  setTimeout(()=>document.getElementById('modal-backdrop').classList.add('hidden'), 150);
+}
+function confirmModal(){
+  if(modalType==='cat') toast('Category added', (document.getElementById('m-cat-name').value||'New category')+' was created.');
+  if(modalType==='sup') toast('Supplier added', (document.getElementById('m-sup-name').value||'New supplier')+' was added.');
+  if(modalType==='invite') toast('Invite sent', 'An invitation was emailed to '+(document.getElementById('m-inv-email').value||'the teammate')+'.');
+  closeModal();
+}
+
+/* ---------------- CHARTS ---------------- */
+let trendChart, bestChart, catChart, valueChart;
+function chartColors(){
+  const dark = document.documentElement.classList.contains('dark');
+  return { grid: dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.05)', text: dark?'#a1a1aa':'#71717a' };
+}
+function initCharts(){
+  const ctx = document.getElementById('chart-trend');
+  if(!ctx || trendChart) return;
+  const c = chartColors();
+  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  trendChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'Stock In', data:[40,55,32,68,50,72,60], borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,.08)', tension:.4, fill:true, pointRadius:3},
+      {label:'Stock Out', data:[30,42,38,45,60,48,55], borderColor:'#f43f5e', backgroundColor:'rgba(244,63,94,.06)', tension:.4, fill:true, pointRadius:3}
+    ]},
+    options:{ responsive:true, plugins:{legend:{position:'top', labels:{boxWidth:8, usePointStyle:true, color:c.text, font:{size:11}}}}, scales:{ x:{grid:{display:false}, ticks:{color:c.text}}, y:{grid:{color:c.grid}, ticks:{color:c.text}} } }
+  });
+}
+function setRange(days){
+  document.getElementById('range-7').className = days===7 ? 'px-2.5 py-1 rounded-md bg-white dark:bg-zinc-700 shadow-soft font-medium' : 'px-2.5 py-1 rounded-md text-zinc-500 font-medium';
+  document.getElementById('range-30').className = days===30 ? 'px-2.5 py-1 rounded-md bg-white dark:bg-zinc-700 shadow-soft font-medium' : 'px-2.5 py-1 rounded-md text-zinc-500 font-medium';
+  if(!trendChart) return;
+  if(days===7){
+    trendChart.data.labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    trendChart.data.datasets[0].data=[40,55,32,68,50,72,60];
+    trendChart.data.datasets[1].data=[30,42,38,45,60,48,55];
+  } else {
+    trendChart.data.labels = Array.from({length:30},(_,i)=>'D'+(i+1));
+    trendChart.data.datasets[0].data = Array.from({length:30},()=>Math.floor(20+Math.random()*60));
+    trendChart.data.datasets[1].data = Array.from({length:30},()=>Math.floor(15+Math.random()*55));
+  }
+  trendChart.update();
+}
+function initReportCharts(){
+  const c = chartColors();
+  if(!bestChart){
+    bestChart = new Chart(document.getElementById('chart-bestsellers'), {
+      type:'bar',
+      data:{ labels:['LED Bulb 9W','Claw Hammer','PVC Pipe 1/2in','Latex Paint 4L','Cordless Drill'], datasets:[{label:'Units sold', data:[142,118,96,84,71], backgroundColor:'#4f46e5', borderRadius:6}] },
+      options:{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{ x:{grid:{color:c.grid}, ticks:{color:c.text}}, y:{grid:{display:false}, ticks:{color:c.text}} } }
+    });
+  }
+  if(!catChart){
+    catChart = new Chart(document.getElementById('chart-category'), {
+      type:'doughnut',
+      data:{ labels:CATS, datasets:[{data:[86,54,41,37,30], backgroundColor:['#4f46e5','#818cf8','#a5b4fc','#34d399','#fbbf24'], borderWidth:0}] },
+      options:{ plugins:{legend:{position:'bottom', labels:{boxWidth:8, usePointStyle:true, color:c.text, font:{size:11}}}} }
+    });
+  }
+  if(!valueChart){
+    valueChart = new Chart(document.getElementById('chart-stockvalue'), {
+      type:'line',
+      data:{ labels:['Wk1','Wk2','Wk3','Wk4','Wk5','Wk6'], datasets:[{label:'Inventory Value (₱)', data:[410000,432000,398000,455000,470000,486200], borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.08)', fill:true, tension:.4}] },
+      options:{ plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}, ticks:{color:c.text}}, y:{grid:{color:c.grid}, ticks:{color:c.text}} } }
+    });
+  }
+  lucide.createIcons();
+}
+</script>
+</body>
+</html>
