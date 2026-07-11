@@ -185,7 +185,7 @@ export default function InventoryApp() {
   function login() {
     setLoggedIn(true);
     setView('dashboard');
-    pushToast('Welcome back, User!', 'You have 5 low-stock items to review.');
+    pushToast('Welcome back, Grace!', 'You have 5 low-stock items to review.');
   }
   function logout() {
     setLoggedIn(false);
@@ -497,6 +497,7 @@ function AuthView({ authTab, setAuthTab, onLogin }: AuthViewProps) {
         <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/70 to-zinc-950 opacity-90" />
         <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-primary/30 blur-3xl" />
         <div className="relative text-primary-foreground max-w-md">
+          <p className="text-primary-foreground/70 text-sm font-medium mb-3">Trusted by 900+ independent coffee shops</p>
           <h2 className="font-heading text-3xl font-bold tracking-tight leading-tight mb-4">Know exactly what&apos;s in your stockroom, down to the last bean.</h2>
           <p className="text-primary-foreground/80 text-sm leading-relaxed">Real-time stock counts, low-stock alerts, and reports that make sense — built for the way small cafés actually run.</p>
           <div className="mt-10 flex items-center gap-4 bg-primary-foreground/10 backdrop-blur rounded-xl p-4 border border-primary-foreground/10">
@@ -515,6 +516,7 @@ function AuthView({ authTab, setAuthTab, onLogin }: AuthViewProps) {
 /* ================= APP SHELL ================= */
 function AppShell(props: AppShellProps) {
   const { view, setView, dark, setDark, onLogout } = props;
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navItems: { section: string; items: { id: View; label: string; icon: LucideIcon }[] }[] = [
     { section: 'Overview', items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
     { section: 'Inventory', items: [
@@ -526,6 +528,33 @@ function AppShell(props: AppShellProps) {
     { section: 'Workspace', items: [{ id: 'team', label: 'Team', icon: Users }, { id: 'settings', label: 'Settings', icon: Settings }] },
   ];
 
+  const sidebarBody = (onNavigate?: () => void) => (
+    <>
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {navItems.map((group) => (
+          <div key={group.section}>
+            <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 mb-1 mt-4 first:mt-0">{group.section}</p>
+            {group.items.map(({ id, label, icon: Icon }) => (
+              <a key={id} href="#" data-nav onClick={(e) => { e.preventDefault(); setView(id); onNavigate?.(); }}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition ${view === id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
+                <Icon className="h-4 w-4" />{label}
+              </a>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <div className="p-3 border-t border-sidebar-border">
+        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-sidebar-accent cursor-pointer" onClick={() => { setView('settings'); onNavigate?.(); }}>
+          <div className="h-8 w-8 rounded-full bg-sidebar-primary/15 text-sidebar-primary flex items-center justify-center text-xs font-bold">KK</div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate text-sidebar-foreground">Kape Kubo Coffee House</p>
+            <p className="text-xs text-sidebar-foreground/50 truncate">Owner plan</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen">
       <div className="flex">
@@ -534,34 +563,31 @@ function AppShell(props: AppShellProps) {
             <div className="h-7 w-7 rounded-lg bg-sidebar-primary flex items-center justify-center"><Coffee className="h-4 w-4 text-sidebar-primary-foreground" /></div>
             <span className="font-heading font-bold tracking-tight text-sidebar-foreground">BrewStock</span>
           </div>
-          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-            {navItems.map((group) => (
-              <div key={group.section}>
-                <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 mb-1 mt-4 first:mt-0">{group.section}</p>
-                {group.items.map(({ id, label, icon: Icon }) => (
-                  <a key={id} href="#" data-nav onClick={(e) => { e.preventDefault(); setView(id); }}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition ${view === id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'}`}>
-                    <Icon className="h-4 w-4" />{label}
-                  </a>
-                ))}
-              </div>
-            ))}
-          </nav>
-          <div className="p-3 border-t border-sidebar-border">
-            <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-sidebar-accent cursor-pointer" onClick={() => setView('settings')}>
-              <div className="h-8 w-8 rounded-full bg-sidebar-primary/15 text-sidebar-primary flex items-center justify-center text-xs font-bold">KK</div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate text-sidebar-foreground">Kape Kubo Coffee House</p>
-                <p className="text-xs text-sidebar-foreground/50 truncate">Owner plan</p>
-              </div>
-            </div>
-          </div>
+          {sidebarBody()}
         </aside>
+
+        {mobileNavOpen && (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setMobileNavOpen(false)} />
+            <aside className="fixed inset-y-0 left-0 z-50 flex flex-col w-64 h-screen bg-sidebar border-r border-sidebar-border md:hidden">
+              <div className="h-16 flex items-center justify-between gap-2 px-5 border-b border-sidebar-border">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-sidebar-primary flex items-center justify-center"><Coffee className="h-4 w-4 text-sidebar-primary-foreground" /></div>
+                  <span className="font-heading font-bold tracking-tight text-sidebar-foreground">BrewStock</span>
+                </div>
+                <button onClick={() => setMobileNavOpen(false)} aria-label="Close menu">
+                  <X className="h-5 w-5 text-sidebar-foreground/70" />
+                </button>
+              </div>
+              {sidebarBody(() => setMobileNavOpen(false))}
+            </aside>
+          </>
+        )}
 
         <div className="flex-1 min-w-0">
           <header className="h-16 sticky top-0 z-30 flex items-center justify-between gap-4 px-4 md:px-6 border-b border-border bg-card/80 backdrop-blur">
             <div className="flex items-center gap-3 min-w-0">
-              <button className="md:hidden"><Menu className="h-5 w-5" /></button>
+              <button className="md:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
               <h1 className="font-heading font-semibold text-lg tracking-tight truncate">{NAV_TITLES[view] || 'Dashboard'}</h1>
             </div>
             <div className="flex items-center gap-2 md:gap-3">
@@ -605,7 +631,7 @@ function DashboardView({ products, transactions, lowStock, openDrawer, setView, 
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-heading text-xl font-bold tracking-tight">Good morning, User ☕</h2>
+          <h2 className="font-heading text-xl font-bold tracking-tight">Good morning, Grace ☕</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Here&apos;s what&apos;s happening in your café today.</p>
         </div>
         <button onClick={openDrawer} className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3.5 py-2 rounded-lg transition shadow-sm"><Plus className="h-4 w-4" />Add Product</button>
