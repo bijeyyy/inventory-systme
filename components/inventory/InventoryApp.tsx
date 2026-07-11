@@ -185,7 +185,7 @@ export default function InventoryApp() {
   function login() {
     setLoggedIn(true);
     setView('dashboard');
-    pushToast('Welcome back, Grace!', 'You have 5 low-stock items to review.');
+    pushToast('Welcome back, User!', 'You have 5 low-stock items to review.');
   }
   function logout() {
     setLoggedIn(false);
